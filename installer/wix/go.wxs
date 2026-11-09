@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Windows Installer package for the go-legacy-win7 toolchain.
+
+  Build with installer/wix/build.ps1. The following preprocessor variables are
+  required:
+
+    Version         Release version shown in Programs and Features (may include
+                    a suffix such as "-2").
+    ProductVersion  Numeric major.minor.patch version used by Windows Installer.
+    SourceDir       Directory containing an unpacked release tree.
+    LicenseRtf      Path to LICENSE.rtf.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="Go $(var.Version) (go-legacy-win7)"
+           Manufacturer="thongtech"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="0bd78fe4-edc5-44d3-8ad0-00103303a824"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+
+    <SummaryInformation Description="Go toolchain with Windows 7, 8 and 8.1 support"
+                        Manufacturer="thongtech"
+                        Keywords="Go;Golang;Windows 7" />
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of the Go toolchain is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPHELPLINK" Value="https://github.com/thongtech/go-legacy-win7" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/thongtech/go-legacy-win7" />
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Go">
+        <!-- Add Go's bin directory to the system PATH and leave a registry
+             key behind for support and upgrade diagnostics. -->
+        <Component Id="GoEnvironment" Guid="6f1a036e-11a6-41a6-bd9c-f2e7a381237b">
+          <Environment Id="GoBinPath"
+                       Name="PATH"
+                       Value="[INSTALLFOLDER]bin"
+                       Action="set"
+                       Part="last"
+                       Permanent="no"
+                       System="yes" />
+          <RegistryValue Id="GoInstallDir"
+                         Root="HKLM"
+                         Key="SOFTWARE\thongtech\GoLegacyWin7"
+                         Name="InstallDir"
+                         Type="string"
+                         Value="[INSTALLFOLDER]"
+                         KeyPath="yes" />
+          <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Go" Title="Go toolchain" Level="1"
+             Description="The Go compiler, standard library, and tools.">
+      <ComponentGroupRef Id="GoFiles" />
+      <ComponentRef Id="GoEnvironment" />
+    </Feature>
+
+    <ComponentGroup Id="GoFiles">
+      <Files Include="$(var.SourceDir)\**" Directory="INSTALLFOLDER" />
+    </ComponentGroup>
+
+  </Package>
+</Wix>

@@ -51,7 +51,7 @@ jobs:
           path: go-legacy-win7
           ref: ${{ steps.branch.outputs.branch }}
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -82,6 +82,7 @@ jobs:
           rm -rf .git*
           rm -rf codereview.cfg
           rm -rf patches
+          rm -rf installer
           rm -rf test
           rm -rf src/**/*_test.go
           rm -rf src/**/testdata
@@ -121,9 +122,20 @@ jobs:
             tar -czf ../go-legacy-win7-${{ inputs.version }}.${{ matrix.target }}.tar.gz .
           fi
 
+      - name: Upload Windows zip for the MSI build
+        if: matrix.target == 'windows_amd64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-legacy-win7-windows_amd64
+          path: go-legacy-win7-${{ inputs.version }}.windows_amd64.zip
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 1
+
       - name: Create Release
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         run: |
           cd go-legacy-win7
 
@@ -146,3 +158,49 @@ jobs:
           gh release upload v${{ inputs.version }} \
             ../go-legacy-win7-${{ inputs.version }}.${{ matrix.target }}.* \
             --clobber
+
+  # WiX cannot build MSI packages on Linux, so this job consumes the
+  # windows_amd64 release zip from the build matrix on a Windows runner.
+  msi:
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - name: Download Windows zip
+        uses: actions/download-artifact@v8
+        with:
+          name: go-legacy-win7-windows_amd64
+
+      - name: Install WiX
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 6.0.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $wix = Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe"
+          & $wix extension add -g WixToolset.UI.wixext/6.0.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Expand-Archive -LiteralPath "go-legacy-win7-${{ inputs.version }}.windows_amd64.zip" -DestinationPath release -Force
+          pwsh -NoProfile -ExecutionPolicy Bypass -File .\installer\wix\build.ps1 `
+            -SourceDir release\go-legacy-win7 -Version "${{ inputs.version }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Attach MSI to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: |
+          gh release upload "v${{ inputs.version }}" `
+            "go-legacy-win7-${{ inputs.version }}.windows_amd64.msi" `
+            --clobber --repo "${{ github.repository }}"

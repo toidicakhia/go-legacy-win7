@@ -135,6 +135,16 @@ To avoid PATH/GOROOT conflicts and mixed toolchains, uninstall any existing Go i
 <details open>
 <summary><strong>Windows Installation</strong></summary>
 
+**MSI installer (64-bit)**
+
+1. Download the `go-legacy-win7-<version>.windows_amd64.msi` file.
+2. Run the installer. It installs to `C:\Program Files\Go` by default and adds `C:\Program Files\Go\bin` to the system `PATH`.
+3. Open a new terminal and run `go version`.
+
+The MSI does not set `GOROOT`; the `go` command finds its own root. Remove any `GOROOT` left by an older installation. To build the installer yourself, see [`installer/wix`](installer/wix).
+
+**ZIP archive**
+
 1. Download the `go-legacy-win7-<version>.windows_<arch>.zip` file.
 2. Extract the ZIP to `C:\` (or any preferred location). This will create a `go-legacy-win7` folder.
 3. Add the following to your system environment variables:

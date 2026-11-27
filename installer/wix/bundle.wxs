@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Single-file EXE installer for the go-legacy-win7 toolchain.
+
+  This is a WiX Burn bundle that wraps the MSI produced by go.wxs. It gives
+  users a conventional setup.exe while keeping the MSI as the component that
+  actually installs the toolchain.
+
+  Build with installer/wix/build.ps1. The following preprocessor variables are
+  required:
+
+    Version         Release version shown in the bundle name (may include a
+                    suffix such as "-2").
+    BundleVersion   Numeric major.minor.patch.revision version used by Burn.
+    MsiPath         Path to the MSI produced by go.wxs.
+    LicenseRtf      Path to LICENSE.rtf.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+
+  <Bundle Name="Go $(var.Version) (go-legacy-win7)"
+          Manufacturer="thongtech"
+          Version="$(var.BundleVersion)"
+          UpgradeCode="9f7e334e-d7d0-44b3-bed2-c8cc75e57510"
+          ProviderKey="{e358e181-ba3c-4749-bf33-ee9dcaa3b79c}"
+          AboutUrl="https://github.com/thongtech/go-legacy-win7"
+          HelpUrl="https://github.com/thongtech/go-legacy-win7"
+          UpdateUrl="https://github.com/thongtech/go-legacy-win7/releases">
+
+    <!-- The standard bootstrapper UI shows this folder on its options page.
+         It can also be set from the command line:
+           setup.exe /quiet InstallFolder="D:\Go" -->
+    <Variable Name="InstallFolder"
+              Type="formatted"
+              Value="[ProgramFiles64Folder]Go"
+              Persisted="yes"
+              bal:Overridable="yes" />
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="rtfLicense"
+          LicenseFile="$(var.LicenseRtf)"
+          ShowVersion="yes"
+          SuppressOptionsUI="no" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <!-- Visible="no" keeps the wrapped MSI out of Programs and Features; the
+           bundle is the entry users see. -->
+      <MsiPackage SourceFile="$(var.MsiPath)"
+                  Vital="yes"
+                  Visible="no">
+        <MsiProperty Name="INSTALLFOLDER" Value="[InstallFolder]" />
+      </MsiPackage>
+    </Chain>
+
+  </Bundle>
+</Wix>

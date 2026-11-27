@@ -1,13 +1,18 @@
-# Builds the Windows amd64 MSI installer from an unpacked release tree.
+# Builds the Windows amd64 installers from an unpacked release tree.
+#
+# The MSI is built first, then wrapped in a single-file EXE bootstrapper.
 #
 # Prerequisites (Windows only; WiX does not support building on Linux):
 #   dotnet tool install --global wix --version 6.0.2
 #   wix extension add -g WixToolset.UI.wixext/6.0.2
+#   wix extension add -g WixToolset.BootstrapperApplications.wixext/6.0.2
 #
 # Usage:
 #   .\installer\wix\build.ps1 -SourceDir release\go-legacy-win7 -Version 1.27.3
 #   .\installer\wix\build.ps1 -SourceDir release\go-legacy-win7 -Version 1.27.3-2 `
 #       -Output go-legacy-win7-1.27.3-2.windows_amd64.msi
+#
+# Pass -NoExe to build only the MSI.
 
 [CmdletBinding()]
 param(
@@ -18,7 +23,12 @@ param(
     [string]$Version,
 
     [Parameter(Position = 2)]
-    [string]$Output
+    [string]$Output,
+
+    [Parameter(Position = 3)]
+    [string]$ExeOutput,
+
+    [switch]$NoExe
 )
 
 Set-StrictMode -Version Latest
@@ -45,8 +55,23 @@ if ($major -gt 255 -or $minor -gt 255 -or $build -gt 65535) {
 }
 $productVersion = "$major.$minor.$build"
 
+# Burn accepts a fourth numeric field, so keep the fork revision there. This
+# lets an EXE built for 1.27.3-2 replace one built for 1.27.3-1, while the MSI
+# still uses the three-field ProductVersion Windows Installer requires.
+$revision = 0
+if ($Version -match '-(\d+)') {
+    $revision = [int]$Matches[1]
+}
+if ($revision -gt 65535) {
+    throw "Revision is outside the range Burn supports: $Version"
+}
+$bundleVersion = "$major.$minor.$build.$revision"
+
 if (-not $Output) {
     $Output = "go-legacy-win7-$Version.windows_amd64.msi"
+}
+if (-not $ExeOutput) {
+    $ExeOutput = "go-legacy-win7-$Version.windows_amd64.exe"
 }
 
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
@@ -67,3 +92,24 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Built $Output"
+
+if ($NoExe) {
+    return
+}
+
+$msiPath = (Resolve-Path -LiteralPath $Output).Path
+
+& wix build (Join-Path $here "bundle.wxs") `
+    -arch x64 `
+    -ext WixToolset.BootstrapperApplications.wixext `
+    -d "Version=$Version" `
+    -d "BundleVersion=$bundleVersion" `
+    -d "MsiPath=$msiPath" `
+    -d "LicenseRtf=$(Join-Path $here 'LICENSE.rtf')" `
+    -o $ExeOutput
+
+if ($LASTEXITCODE -ne 0) {
+    throw "wix build failed with exit code $LASTEXITCODE"
+}
+
+Write-Host "Built $ExeOutput"

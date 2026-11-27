@@ -11,6 +11,7 @@
 *.rej
 *.exe
 *.msi
+*.wixpdb
 .*.swp
 core
 *.cgo*.go
